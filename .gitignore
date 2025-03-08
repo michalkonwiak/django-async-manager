@@ -16,6 +16,7 @@ eggs/
 .eggs/
 lib/
 lib64/
+.idea/
 parts/
 sdist/
 var/
@@ -168,4 +169,4 @@ cython_debug/
 #.idea/
 
 # PyPI configuration file
-.pypirc
+.pypirc.idea/
