@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: run-tests
+        name: Run tests
+        entry: uv run env DJANGO_SETTINGS_MODULE=django_async_manager.settings pytest
+        language: system
+        pass_filenames: false

@@ -1,0 +1,37 @@
+[project]
+name = "django-async-manager"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django==4.2",
+    "factory-boy>=3.3.3",
+    "flake8>=7.1.2",
+    "pre-commit>=4.1.0",
+    "pytest>=8.3.5",
+    "pytest-django>=4.10.0",
+    "ruff>=0.9.10",
+]
+
+[ruff]
+line-length = 100
+target-version = "py312"
+
+exclude = [
+    ".git",
+    "__pycache__",
+    "migrations",
+    "venv",
+    ".venv",
+    "env",
+    "settings.py",
+    "manage.py"
+]
+
+ignore = [
+    "E203", "W503", "E501", "F401", "F811", "B008"
+]
+
+[ruff.mccabe]
+max-complexity = 10
