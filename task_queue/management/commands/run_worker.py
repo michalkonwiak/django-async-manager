@@ -1,7 +1,6 @@
 import logging
-import multiprocessing
 from django.core.management.base import BaseCommand
-from task_queue.worker import TaskWorker
+from task_queue.worker import WorkerManager
 
 logger = logging.getLogger("task_worker")
 
@@ -16,22 +15,19 @@ class Command(BaseCommand):
             default=1,
             help="Number of worker processes to start (default: 1)",
         )
+        parser.add_argument(
+            "--processes",
+            action="store_true",
+            help="Use multiprocessing instead of threading.",
+        )
 
     def handle(self, *args, **options):
         num_workers = options["num_workers"]
-        logger.info(f"Starting {num_workers} worker(s)...")
+        use_threads = not options["processes"]
+        logger.info(
+            f"Starting {num_workers} {'thread' if use_threads else 'process'} workers..."
+        )
 
-        processes = []
-        for i in range(num_workers):
-            process = multiprocessing.Process(target=self.start_worker, args=(i,))
-            process.start()
-            processes.append(process)
-
-        for process in processes:
-            process.join()
-
-    def start_worker(self, worker_id):
-        """Run single worker"""
-        logger.info(f"Worker {worker_id} started")
-        worker = TaskWorker()
-        worker.run()
+        manager = WorkerManager(num_workers=num_workers, use_threads=use_threads)
+        manager.start_workers()
+        manager.join_workers()
