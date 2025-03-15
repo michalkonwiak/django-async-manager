@@ -2,8 +2,11 @@ import logging
 import multiprocessing
 import threading
 import time
+
+from django.db import transaction
+from django.db.models import Q
 from django.utils.timezone import now
-from task_queue.models import Task
+from task_queue.models import Task, TASK_REGISTRY
 
 logger = logging.getLogger("task_worker")
 
@@ -14,29 +17,47 @@ class TaskWorker:
     def __init__(self, use_threads=True):
         self.use_threads = use_threads
 
-    def process_task(self):
+    def process_task(self) -> None:
         """Fetch and execute a single task."""
-        task = Task.objects.filter(status="pending").order_by("-priority").first()
-        if not task:
+        try:
+            with transaction.atomic():
+                task = (
+                    Task.objects.select_for_update(skip_locked=True)
+                    .filter(status="pending")
+                    .filter(
+                        Q(parent_task__isnull=True) | Q(parent_task__status="completed")
+                    )
+                    .filter(Q(scheduled_at__isnull=True) | Q(scheduled_at__lte=now()))
+                    .order_by("-priority", "created_at")
+                    .first()
+                )
+                if not task:
+                    return
+
+                task.status = "in_progress"
+                task.started_at = now()
+                task.save()
+        except Exception:
+            logger.exception("Error during processing task")
             return
 
-        # Locking
-        task.status = "in_progress"
-        task.started_at = now()
-        task.save()
-
         try:
-            func = globals().get(task.name)
-            if func:
-                args = task.arguments.get("args", [])
-                kwargs = task.arguments.get("kwargs", {})
-                func(*args, **kwargs)
+            func = TASK_REGISTRY.get(task.name)
+            if not func:
+                error_msg = f"Task function '{task.name}' has not been registered."
+                logger.error(error_msg)
+                task.mark_as_failed(error_msg)
+                return
 
+            args = task.arguments.get("args", [])
+            kwargs = task.arguments.get("kwargs", {})
+            func(*args, **kwargs)
             task.mark_as_completed()
         except Exception as e:
+            logger.exception(f"Error during task execution {task.id}: {e}")
             task.mark_as_failed(str(e))
 
-    def run(self):
+    def run(self) -> None:
         """Continuous processing of tasks."""
         logger.info(
             "Worker started using %s", "threads" if self.use_threads else "processes"
@@ -54,7 +75,7 @@ class WorkerManager:
         self.use_threads = use_threads
         self.workers = []
 
-    def start_workers(self):
+    def start_workers(self) -> None:
         """Start worker processes or threads."""
         logger.info(
             f"Starting {self.num_workers} {'thread' if self.use_threads else 'process'} workers"
@@ -70,7 +91,7 @@ class WorkerManager:
                 process.start()
                 self.workers.append(process)
 
-    def join_workers(self):
+    def join_workers(self) -> None:
         """Wait for all workers to complete."""
         for worker in self.workers:
             worker.join()
