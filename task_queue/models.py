@@ -1,6 +1,10 @@
 import uuid
+from typing import Dict, Callable, Any
+
 from django.db import models
 from django.utils.timezone import now
+
+TASK_REGISTRY: Dict[str, Callable[..., Any]] = {}
 
 
 class Task(models.Model):
@@ -74,6 +78,13 @@ class Task(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.status}) - Priority: {self.priority}"
+
+    @property
+    def is_ready(self):
+        """Checks that the task is ready to execute."""
+        if self.parent_task:
+            return self.parent_task.status == "completed"
+        return True
 
     def mark_as_failed(self, error_message):
         """Mark error and increment attempt counter"""
