@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, Callable, Any
+from typing import Dict, Callable, Any, List
 
 from django.db import models
 from django.utils.timezone import now
@@ -30,7 +30,6 @@ class Task(models.Model):
         choices=[(v, k) for k, v in PRIORITY_MAPPING.items()], default=2
     )
     arguments = models.JSONField(help_text="JSON containing function arguments")
-
     created_at = models.DateTimeField(default=now)
     scheduled_at = models.DateTimeField(
         null=True, blank=True, help_text="Task will run at this time"
@@ -40,24 +39,22 @@ class Task(models.Model):
     timeout = models.IntegerField(
         default=300, help_text="Max execution time in seconds"
     )
-
     attempts = models.IntegerField(default=0)
     max_retries = models.IntegerField(
-        default=3, help_text="Max number of retries before marking as failed"
+        default=1, help_text="Max number of retries before marking as failed"
     )
-
     worker_id = models.CharField(
         max_length=255,
         null=True,
         blank=True,
         help_text="Identifier of the worker that processed this task",
     )
-    parent_task = models.ForeignKey(
+    dependencies = models.ManyToManyField(
         "self",
-        null=True,
+        symmetrical=False,
         blank=True,
-        on_delete=models.SET_NULL,
         related_name="dependent_tasks",
+        help_text="Tasks that must be completed before this one runs",
     )
 
     last_errors = models.JSONField(
@@ -82,8 +79,8 @@ class Task(models.Model):
     @property
     def is_ready(self):
         """Checks that the task is ready to execute."""
-        if self.parent_task:
-            return self.parent_task.status == "completed"
+        if self.dependencies.exists():
+            return not self.dependencies.exclude(status="completed").exists()
         return True
 
     def mark_as_failed(self, error_message):
@@ -105,3 +102,16 @@ class Task(models.Model):
     def can_retry(self):
         """Check if task can be retried"""
         return self.attempts < self.max_retries
+
+    def _has_cycle(self, visited: List["Task"] = None) -> bool:
+        """A recursive method to check cycles in dependencies"""
+        if visited is None:
+            visited = []
+        if self in visited:
+            return True
+        visited.append(self)
+        for dep in self.dependencies.all():
+            if dep._has_cycle(visited):
+                return True
+        visited.pop()
+        return False
