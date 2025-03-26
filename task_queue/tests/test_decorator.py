@@ -15,12 +15,8 @@ class BackgroundTaskDecoratorTests(TestCase):
 
         self.assertIsInstance(task, Task)
         self.assertEqual(task.status, "pending")
-
         args = task.arguments.get("args")
-
-        if isinstance(args, tuple):
-            args = list(args)
-        self.assertEqual(args, [2, 3])
+        self.assertEqual(list(args) if isinstance(args, tuple) else args, [2, 3])
         self.assertEqual(task.arguments.get("kwargs"), {})
 
     def test_task_dependency_registration(self):
@@ -34,19 +30,18 @@ class BackgroundTaskDecoratorTests(TestCase):
         self.assertIsInstance(parent, Task)
         self.assertEqual(parent.status, "pending")
 
-        @background_task(parent_task=parent)
+        @background_task(dependencies=parent)
         def child_task(y):
             return y
 
         child = child_task.run_async(20)
         self.assertIsInstance(child, Task)
-        self.assertEqual(child.parent_task, parent)
+        self.assertIn(parent, list(child.dependencies.all()))
 
         self.assertFalse(child.is_ready)
 
         parent.mark_as_completed()
         child.refresh_from_db()
-
         self.assertTrue(child.is_ready)
 
     def test_is_ready_property_without_parent(self):

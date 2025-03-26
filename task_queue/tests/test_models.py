@@ -73,9 +73,11 @@ class TaskModelTests(TestCase):
     def test_foreign_key_dependency(self):
         """Test parent-child task relationships."""
         parent_task = TaskFactory.create(name="Parent Task")
-        child_task = TaskFactory.create(name="Child Task", parent_task=parent_task)
+        child_task = TaskFactory.create(name="Child Task")
+        child_task.dependencies.add(parent_task)
 
-        self.assertEqual(child_task.parent_task, parent_task)
+        self.assertEqual(child_task.dependencies.count(), 1)
+        self.assertIn(parent_task, child_task.dependencies.all())
         self.assertEqual(parent_task.dependent_tasks.count(), 1)
         self.assertEqual(parent_task.dependent_tasks.first(), child_task)
 

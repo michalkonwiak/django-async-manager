@@ -38,6 +38,14 @@ class TaskFactory(factory.django.DjangoModelFactory):
     last_errors = factory.LazyAttribute(lambda _: [])
     archived = False
 
+    @factory.post_generation
+    def dependencies(self, create, extracted, **kwargs):
+        if not create:
+            return
+        if extracted:
+            for dependency in extracted:
+                self.dependencies.add(dependency)
+
     @classmethod
     def from_string_priority(cls, **kwargs):
         if "priority" in kwargs and isinstance(kwargs["priority"], str):

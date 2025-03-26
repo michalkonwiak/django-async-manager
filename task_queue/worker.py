@@ -4,7 +4,7 @@ import threading
 import time
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count, F
 from django.utils.timezone import now
 from task_queue.models import Task, TASK_REGISTRY
 
@@ -21,16 +21,23 @@ class TaskWorker:
         """Fetch and execute a single task."""
         try:
             with transaction.atomic():
-                task = (
-                    Task.objects.select_for_update(skip_locked=True)
-                    .filter(status="pending")
+                task_qs = (
+                    Task.objects.filter(status="pending")
+                    .annotate(
+                        total_dependencies=Count("dependencies"),
+                        completed_dependencies=Count(
+                            "dependencies", filter=Q(dependencies__status="completed")
+                        ),
+                    )
                     .filter(
-                        Q(parent_task__isnull=True) | Q(parent_task__status="completed")
+                        Q(total_dependencies=0)
+                        | Q(total_dependencies=F("completed_dependencies"))
                     )
                     .filter(Q(scheduled_at__isnull=True) | Q(scheduled_at__lte=now()))
                     .order_by("-priority", "created_at")
-                    .first()
                 )
+
+                task = task_qs.select_for_update(skip_locked=True).first()
                 if not task:
                     return
 

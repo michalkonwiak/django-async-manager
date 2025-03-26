@@ -1,10 +1,10 @@
 from functools import wraps
-from typing import Optional, Callable
+from typing import Optional, Callable, Union, List
 
 from task_queue.models import Task, TASK_REGISTRY
 
 
-def background_task(parent_task: Optional[Task] = None) -> Callable:
+def background_task(dependencies: Optional[Union[Task, List[Task]]] = None) -> Callable:
     """Decorator for registering background tasks."""
 
     def decorator(func: Callable) -> Callable:
@@ -16,8 +16,14 @@ def background_task(parent_task: Optional[Task] = None) -> Callable:
                 name=func.__name__,
                 arguments={"args": args, "kwargs": kwargs},
                 status="pending",
-                parent_task=parent_task,
             )
+            if dependencies:
+                deps = (
+                    dependencies
+                    if isinstance(dependencies, (list, tuple))
+                    else [dependencies]
+                )
+                task.dependencies.set(deps)
             return task
 
         wrapper.run_async = wrapper
