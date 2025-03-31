@@ -62,7 +62,10 @@ class TaskWorker:
             task.mark_as_completed()
         except Exception as e:
             logger.exception(f"Error during task execution {task.id}: {e}")
-            task.mark_as_failed(str(e))
+            if task.autoretry and task.can_retry():
+                task.schedule_retry(str(e))
+            else:
+                task.mark_as_failed(str(e))
 
     def run(self) -> None:
         """Continuous processing of tasks."""
