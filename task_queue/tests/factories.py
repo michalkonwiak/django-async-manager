@@ -37,6 +37,9 @@ class TaskFactory(factory.django.DjangoModelFactory):
     )
     last_errors = factory.LazyAttribute(lambda _: [])
     archived = False
+    autoretry = True
+    retry_delay = 60
+    retry_backoff = 2.0
 
     @factory.post_generation
     def dependencies(self, create, extracted, **kwargs):

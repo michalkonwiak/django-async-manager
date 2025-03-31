@@ -1,5 +1,6 @@
+from datetime import timedelta
 import uuid
-from typing import Dict, Callable, Any, List
+from typing import Dict, Callable, Any
 
 from django.db import models
 from django.utils.timezone import now
@@ -56,14 +57,25 @@ class Task(models.Model):
         related_name="dependent_tasks",
         help_text="Tasks that must be completed before this one runs",
     )
-
     last_errors = models.JSONField(
         default=list, help_text="Stores last 5 error messages"
     )
-
     archived = models.BooleanField(
         default=False,
         help_text="If true, this task is archived for performance reasons",
+    )
+
+    autoretry = models.BooleanField(
+        default=True,
+        help_text="Automatically retry the job in case of an error",
+    )
+    retry_delay = models.IntegerField(
+        default=60,
+        help_text="Initial delay (in seconds) before retrying",
+    )
+    retry_backoff = models.FloatField(
+        default=2.0,
+        help_text="Multiplier for exponential increase in delay",
     )
 
     class Meta:
@@ -84,13 +96,12 @@ class Task(models.Model):
         return True
 
     def mark_as_failed(self, error_message):
-        """Mark error and increment attempt counter"""
+        """Mark error and increment attempt counter (without autoretry)"""
         self.attempts += 1
         if len(self.last_errors) >= 5:
             self.last_errors.pop(0)
         self.last_errors.append(error_message)
-        if self.attempts >= self.max_retries:
-            self.status = "failed"
+        self.status = "failed"
         self.save()
 
     def mark_as_completed(self):
@@ -103,15 +114,18 @@ class Task(models.Model):
         """Check if task can be retried"""
         return self.attempts < self.max_retries
 
-    def _has_cycle(self, visited: List["Task"] = None) -> bool:
-        """A recursive method to check cycles in dependencies"""
-        if visited is None:
-            visited = []
-        if self in visited:
-            return True
-        visited.append(self)
-        for dep in self.dependencies.all():
-            if dep._has_cycle(visited):
-                return True
-        visited.pop()
-        return False
+    def schedule_retry(self, error_message: str) -> None:
+        """Planning to retry a task using exponential backoff."""
+        self.attempts += 1
+        if len(self.last_errors) >= 5:
+            self.last_errors.pop(0)
+        self.last_errors.append(error_message)
+        if self.attempts < self.max_retries:
+            delay_seconds = int(
+                self.retry_delay * (self.retry_backoff ** (self.attempts - 1))
+            )
+            self.scheduled_at = now() + timedelta(seconds=delay_seconds)
+            self.status = "pending"
+        else:
+            self.status = "failed"
+        self.save()

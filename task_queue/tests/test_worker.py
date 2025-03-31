@@ -26,9 +26,7 @@ class TaskWorkerTests(TestCase):
         task = Task.objects.create(
             name="test_task", status="pending", arguments={"args": [], "kwargs": {}}
         )
-
         self.worker.process_task()
-
         task.refresh_from_db()
         self.assertEqual(task.status, "completed")
 
@@ -37,7 +35,6 @@ class TaskWorkerTests(TestCase):
         task = Task.objects.create(
             name="test_task", status="failed", arguments={"args": [], "kwargs": {}}
         )
-
         self.worker.process_task()
         task.refresh_from_db()
         self.assertEqual(task.status, "failed")
@@ -56,9 +53,7 @@ class TaskWorkerTests(TestCase):
             priority=10,
             arguments={"args": [], "kwargs": {}},
         )
-
         self.worker.process_task()
-
         high_priority_task.refresh_from_db()
         low_priority_task.refresh_from_db()
         self.assertEqual(high_priority_task.status, "completed")
@@ -69,9 +64,7 @@ class TaskWorkerTests(TestCase):
         task = Task.objects.create(
             name="test_task", status="in_progress", arguments={"args": [], "kwargs": {}}
         )
-
         self.worker.process_task()
-
         task.refresh_from_db()
         self.assertEqual(task.status, "in_progress")
 
@@ -83,14 +76,11 @@ class TaskWorkerTests(TestCase):
         task2 = Task.objects.create(
             name="task2", status="pending", arguments={"args": [], "kwargs": {}}
         )
-
         self.worker.process_task()
         task1.refresh_from_db()
         task2.refresh_from_db()
-
         self.assertEqual(task1.status, "completed")
         self.assertEqual(task2.status, "pending")
-
         self.worker.process_task()
         task2.refresh_from_db()
         self.assertEqual(task2.status, "completed")
@@ -102,9 +92,7 @@ class TaskWorkerTests(TestCase):
             status="pending",
             arguments={"args": [], "kwargs": {}},
         )
-
         self.worker.process_task()
-
         task.refresh_from_db()
         self.assertIsNotNone(task.started_at)
         self.assertLessEqual(task.started_at, now())

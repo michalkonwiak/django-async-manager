@@ -12,7 +12,6 @@ class BackgroundTaskDecoratorTests(TestCase):
             return x + y
 
         task = dummy_task.run_async(2, 3)
-
         self.assertIsInstance(task, Task)
         self.assertEqual(task.status, "pending")
         args = task.arguments.get("args")
@@ -37,7 +36,6 @@ class BackgroundTaskDecoratorTests(TestCase):
         child = child_task.run_async(20)
         self.assertIsInstance(child, Task)
         self.assertIn(parent, list(child.dependencies.all()))
-
         self.assertFalse(child.is_ready)
 
         parent.mark_as_completed()
@@ -45,10 +43,38 @@ class BackgroundTaskDecoratorTests(TestCase):
         self.assertTrue(child.is_ready)
 
     def test_is_ready_property_without_parent(self):
-        """Test that a standalone task  is always marked as ready."""
+        """Test that a standalone task is always marked as ready."""
         task = Task.objects.create(
             name="standalone_task",
             arguments={"args": [], "kwargs": {}},
             status="pending",
         )
         self.assertTrue(task.is_ready)
+
+    def test_autoretry_configuration(self):
+        """Test that a task registered with custom autoretry parameters is created with expected settings."""
+
+        @background_task(
+            autoretry=False, retry_delay=30, retry_backoff=3.0, max_retries=5
+        )
+        def autoretry_task(x):
+            return x
+
+        task = autoretry_task.run_async(42)
+        self.assertFalse(task.autoretry)
+        self.assertEqual(task.retry_delay, 30)
+        self.assertEqual(task.retry_backoff, 3.0)
+        self.assertEqual(task.max_retries, 5)
+
+    def test_default_autoretry_configuration(self):
+        """Test that default autoretry settings are applied if none are provided."""
+
+        @background_task()
+        def default_task(x):
+            return x
+
+        task = default_task.run_async(99)
+        self.assertTrue(task.autoretry)
+        self.assertEqual(task.retry_delay, 60)
+        self.assertEqual(task.retry_backoff, 2.0)
+        self.assertEqual(task.max_retries, 1)

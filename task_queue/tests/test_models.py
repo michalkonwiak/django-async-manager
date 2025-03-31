@@ -28,18 +28,18 @@ class TaskModelTests(TestCase):
         self.assertEqual(self.task.last_errors, [])
         self.assertFalse(self.task.archived)
 
-    def test_mark_task_as_failed(self):
-        """Test failure handling and retry logic."""
-        self.task.mark_as_failed("First failure")
-        self.assertEqual(self.task.attempts, 1)
-        self.assertEqual(self.task.last_errors, ["First failure"])
-        self.assertEqual(self.task.status, "pending")
-
-        for i in range(self.task.max_retries):
-            self.task.mark_as_failed(f"Error {i + 1}")
-
-        self.assertEqual(self.task.status, "failed")
-        self.assertEqual(len(self.task.last_errors), min(self.task.attempts, 5))
+    def test_schedule_retry(self):
+        """Test scheduling a retry with exponential backoff."""
+        initial_attempts = self.task.attempts
+        self.task.schedule_retry("Retry error")
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.attempts, initial_attempts + 1)
+        self.assertIn("Retry error", self.task.last_errors)
+        if self.task.attempts < self.task.max_retries:
+            self.assertEqual(self.task.status, "pending")
+            self.assertTrue(self.task.scheduled_at > now())
+        else:
+            self.assertEqual(self.task.status, "failed")
 
     def test_mark_as_completed(self):
         """Test marking task as completed."""
