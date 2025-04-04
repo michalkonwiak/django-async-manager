@@ -10,6 +10,7 @@ def background_task(
     retry_delay: int = 60,
     retry_backoff: float = 2.0,
     max_retries: int = 1,
+    timeout: int = 300,
 ) -> Callable:
     """Decorator for registering background tasks."""
 
@@ -26,6 +27,7 @@ def background_task(
                 retry_delay=retry_delay,
                 retry_backoff=retry_backoff,
                 max_retries=max_retries,
+                timeout=timeout,
             )
             if dependencies:
                 deps = (

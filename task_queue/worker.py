@@ -2,6 +2,7 @@ import logging
 import multiprocessing
 import threading
 import time
+from concurrent.futures import ProcessPoolExecutor
 
 from django.db import transaction
 from django.db.models import Q, Count, F
@@ -9,6 +10,26 @@ from django.utils.timezone import now
 from task_queue.models import Task, TASK_REGISTRY
 
 logger = logging.getLogger("task_worker")
+
+
+class TimeoutException(Exception):
+    """Raised when a task exceeds its allowed execution time."""
+
+    pass
+
+
+def execute_task(func, args, kwargs, timeout):
+    """
+    Execute a function in a separate process using a ProcessPoolExecutor with a given timeout.
+
+    Uses the per-task timeout value passed from the Task instance.
+    """
+    with ProcessPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout)
+        except TimeoutError:
+            raise TimeoutException(f"Task exceeded timeout of {timeout} seconds")
 
 
 class TaskWorker:
@@ -58,8 +79,14 @@ class TaskWorker:
 
             args = task.arguments.get("args", [])
             kwargs = task.arguments.get("kwargs", {})
-            func(*args, **kwargs)
+            execute_task(func, args, kwargs, task.timeout)
             task.mark_as_completed()
+        except TimeoutException as te:
+            logger.exception(f"Timeout: Task {task.id} exceeded time limit.")
+            if task.autoretry and task.can_retry():
+                task.schedule_retry(str(te))
+            else:
+                task.mark_as_failed(str(te))
         except Exception as e:
             logger.exception(f"Error during task execution {task.id}: {e}")
             if task.autoretry and task.can_retry():
