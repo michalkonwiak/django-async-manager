@@ -78,3 +78,13 @@ class BackgroundTaskDecoratorTests(TestCase):
         self.assertEqual(task.retry_delay, 60)
         self.assertEqual(task.retry_backoff, 2.0)
         self.assertEqual(task.max_retries, 1)
+
+    def test_timeout_value_set_by_decorator(self):
+        """Test that the timeout parameter provided in the decorator is correctly set on the task."""
+
+        @background_task(timeout=600)
+        def task_with_timeout():
+            return "done"
+
+        task = task_with_timeout.run_async()
+        self.assertEqual(task.timeout, 600)
