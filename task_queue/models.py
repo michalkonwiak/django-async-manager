@@ -1,3 +1,4 @@
+import datetime
 from datetime import timedelta
 import uuid
 from typing import Dict, Callable, Any
@@ -44,6 +45,7 @@ class Task(models.Model):
     max_retries = models.IntegerField(
         default=1, help_text="Max number of retries before marking as failed"
     )
+
     worker_id = models.CharField(
         max_length=255,
         null=True,
@@ -129,3 +131,63 @@ class Task(models.Model):
         else:
             self.status = "failed"
         self.save()
+
+
+class CrontabSchedule(models.Model):
+    minute = models.CharField(
+        max_length=64, default="*", help_text="Minute field, e.g. '*' or '0,15,30,45'"
+    )
+    hour = models.CharField(
+        max_length=64, default="*", help_text="Hour field, e.g. '*' or '0,12'"
+    )
+    day_of_week = models.CharField(
+        max_length=64, default="*", help_text="Day of week field, e.g. '*' or 'mon-fri'"
+    )
+    day_of_month = models.CharField(
+        max_length=64, default="*", help_text="Day of month field, e.g. '*' or '1,15'"
+    )
+    month_of_year = models.CharField(
+        max_length=64,
+        default="*",
+        help_text="Month of year field, e.g. '*' or '1,6,12'",
+    )
+
+    def __str__(self):
+        return f"{self.minute} {self.hour} {self.day_of_month} {self.month_of_year} {self.day_of_week}"
+
+    def get_next_run_time(self, base_time=None):
+        if base_time is None:
+            base_time = now()
+        from croniter import croniter
+
+        schedule = f"{self.minute} {self.hour} {self.day_of_month} {self.month_of_year} {self.day_of_week}"
+        iter = croniter(schedule, base_time)
+        return iter.get_next(datetime.datetime)
+
+
+class PeriodicTask(models.Model):
+    name = models.CharField(
+        max_length=255, unique=True, help_text="Unique name for the periodic task."
+    )
+    task_name = models.CharField(
+        max_length=255, help_text="Name of the registered task function to be executed."
+    )
+    arguments = models.JSONField(
+        default=list, help_text="List of positional arguments for the task."
+    )
+    kwargs = models.JSONField(
+        default=dict, help_text="Dictionary of keyword arguments for the task."
+    )
+    crontab = models.ForeignKey(
+        CrontabSchedule, on_delete=models.CASCADE, related_name="periodic_tasks"
+    )
+    enabled = models.BooleanField(default=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    total_run_count = models.PositiveIntegerField(default=0)
+
+    def get_next_run_at(self):
+        base_time = self.last_run_at if self.last_run_at else now()
+        return self.crontab.get_next_run_time(base_time)
+
+    def __str__(self):
+        return self.name
