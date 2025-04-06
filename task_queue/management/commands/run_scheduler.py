@@ -6,7 +6,7 @@ logger = logging.getLogger("task_scheduler")
 
 
 class Command(BaseCommand):
-    help = "Run the periodic task scheduler similar to Celery Beat."
+    help = "Run the periodic task scheduler"
 
     def add_arguments(self, parser):
         parser.add_argument(
