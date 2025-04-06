@@ -5,7 +5,7 @@ from task_queue.models import Task
 from task_queue.tests.factories import TaskFactory
 
 
-class TaskModelTests(TestCase):
+class TestTask(TestCase):
     def setUp(self):
         """Set up common test data for Task model tests."""
         self.task = TaskFactory.create(

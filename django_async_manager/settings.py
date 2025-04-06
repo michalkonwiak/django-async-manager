@@ -160,5 +160,10 @@ LOGGING = {
             "level": "DEBUG",
             "propagate": False,
         },
+        "task_scheduler": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
     },
 }

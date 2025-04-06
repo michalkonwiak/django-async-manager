@@ -35,11 +35,11 @@ def execute_task(func, args, kwargs, timeout):
 class TaskWorker:
     """Worker for fetching and executing tasks"""
 
-    def __init__(self, use_threads=True):
+    def __init__(self, worker_id: str, use_threads=True):
+        self.worker_id = worker_id
         self.use_threads = use_threads
 
     def process_task(self) -> None:
-        """Fetch and execute a single task."""
         try:
             with transaction.atomic():
                 task_qs = (
@@ -62,12 +62,16 @@ class TaskWorker:
                 if not task:
                     return
 
+                if not task.worker_id:
+                    task.worker_id = str(task.id)
                 task.status = "in_progress"
                 task.started_at = now()
                 task.save()
         except Exception:
             logger.exception("Error during processing task")
             return
+
+        task.refresh_from_db()
 
         try:
             func = TASK_REGISTRY.get(task.name)
@@ -97,7 +101,9 @@ class TaskWorker:
     def run(self) -> None:
         """Continuous processing of tasks."""
         logger.info(
-            "Worker started using %s", "threads" if self.use_threads else "processes"
+            "Worker %s started using %s",
+            self.worker_id,
+            "threads" if self.use_threads else "processes",
         )
         while True:
             self.process_task()
@@ -118,7 +124,8 @@ class WorkerManager:
             f"Starting {self.num_workers} {'thread' if self.use_threads else 'process'} workers"
         )
         for i in range(self.num_workers):
-            worker = TaskWorker(use_threads=self.use_threads)
+            worker_id = f"worker-{i + 1}"
+            worker = TaskWorker(worker_id=worker_id, use_threads=self.use_threads)
             if self.use_threads:
                 thread = threading.Thread(target=worker.run, daemon=True)
                 thread.start()

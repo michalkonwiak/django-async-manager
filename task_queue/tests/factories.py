@@ -3,7 +3,7 @@ import uuid
 from django.utils.timezone import now, timedelta
 from faker import Faker
 
-from task_queue.models import Task
+from task_queue.models import Task, CrontabSchedule, PeriodicTask
 
 faker = Faker()
 
@@ -54,3 +54,32 @@ class TaskFactory(factory.django.DjangoModelFactory):
         if "priority" in kwargs and isinstance(kwargs["priority"], str):
             kwargs["priority"] = Task.PRIORITY_MAPPING.get(kwargs["priority"], 2)
         return cls.create(**kwargs)
+
+
+class CrontabScheduleFactory(factory.django.DjangoModelFactory):
+    """Factory to create CrontabSchedule instances for testing."""
+
+    class Meta:
+        model = CrontabSchedule
+
+    minute = "*"
+    hour = "*"
+    day_of_week = "*"
+    day_of_month = "*"
+    month_of_year = "*"
+
+
+class PeriodicTaskFactory(factory.django.DjangoModelFactory):
+    """Factory to create PeriodicTask instances for testing."""
+
+    class Meta:
+        model = PeriodicTask
+
+    name = factory.Sequence(lambda n: f"Periodic Task {n}")
+    task_name = "dummy_task"
+    arguments = factory.List([])
+    kwargs = factory.Dict({})
+    crontab = factory.SubFactory(CrontabScheduleFactory)
+    enabled = True
+    last_run_at = None
+    total_run_count = 0
