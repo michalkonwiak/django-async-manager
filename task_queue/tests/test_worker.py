@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.utils.timezone import now, timedelta
 
+from task_queue.decorators import background_task
 from task_queue.models import Task, TASK_REGISTRY
 from task_queue.tests.factories import TaskFactory
 from task_queue.worker import TaskWorker
@@ -129,3 +130,23 @@ class TestTask(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.worker_id, str(task.id))
         self.assertEqual(task.status, "completed")
+
+    def test_background_task_decorator_default_queue(self):
+        """Test that the background_task decorator creates a task with the default queue."""
+
+        @background_task()
+        def dummy(x):
+            return x
+
+        task = dummy.run_async(5)
+        self.assertEqual(task.queue, "default")
+
+    def test_background_task_decorator_custom_queue(self):
+        """Test that the background_task decorator creates a task with a custom queue."""
+
+        @background_task(queue="config")
+        def dummy_custom():
+            return "ok"
+
+        task = dummy_custom.run_async()
+        self.assertEqual(task.queue, "config")

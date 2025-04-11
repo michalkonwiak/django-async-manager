@@ -88,3 +88,13 @@ class BackgroundTaskDecoratorTests(TestCase):
 
         task = task_with_timeout.run_async()
         self.assertEqual(task.timeout, 600)
+
+    def test_priority_value_set_by_decorator(self):
+        """Test that a task decorated with a specific priority is created with the expected priority value."""
+
+        @background_task(priority="critical")
+        def task_with_critical_priority(x):
+            return x
+
+        task = task_with_critical_priority.run_async(100)
+        self.assertEqual(task.priority, Task.PRIORITY_MAPPING["critical"])
