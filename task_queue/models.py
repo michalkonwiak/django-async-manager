@@ -66,7 +66,11 @@ class Task(models.Model):
         default=False,
         help_text="If true, this task is archived for performance reasons",
     )
-
+    queue = models.CharField(
+        max_length=50,
+        default="default",
+        help_text="Name of the queue for routing tasks",
+    )
     autoretry = models.BooleanField(
         default=True,
         help_text="Automatically retry the job in case of an error",
@@ -81,7 +85,7 @@ class Task(models.Model):
     )
 
     class Meta:
-        ordering = ["priority", "created_at"]
+        ordering = ["-priority", "created_at"]
         indexes = [
             models.Index(fields=["status"]),
             models.Index(fields=["priority"]),

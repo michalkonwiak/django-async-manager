@@ -35,8 +35,9 @@ def execute_task(func, args, kwargs, timeout):
 class TaskWorker:
     """Worker for fetching and executing tasks"""
 
-    def __init__(self, worker_id: str, use_threads=True):
+    def __init__(self, worker_id: str, queue: str = "default", use_threads=True):
         self.worker_id = worker_id
+        self.queue = queue
         self.use_threads = use_threads
 
     def process_task(self) -> None:
@@ -113,8 +114,9 @@ class TaskWorker:
 class WorkerManager:
     """Manages multiple workers, supporting both multiprocessing and threading."""
 
-    def __init__(self, num_workers=1, use_threads=True):
+    def __init__(self, num_workers=1, queue="default", use_threads=True):
         self.num_workers = num_workers
+        self.queue = queue
         self.use_threads = use_threads
         self.workers = []
 
@@ -125,7 +127,9 @@ class WorkerManager:
         )
         for i in range(self.num_workers):
             worker_id = f"worker-{i + 1}"
-            worker = TaskWorker(worker_id=worker_id, use_threads=self.use_threads)
+            worker = TaskWorker(
+                worker_id=worker_id, queue=self.queue, use_threads=self.use_threads
+            )
             if self.use_threads:
                 thread = threading.Thread(target=worker.run, daemon=True)
                 thread.start()
