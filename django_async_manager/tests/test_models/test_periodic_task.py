@@ -1,7 +1,7 @@
 import datetime
 from django.test import TestCase
 from django.utils.timezone import now, utc
-from task_queue.tests.factories import PeriodicTaskFactory
+from django_async_manager.tests.factories import PeriodicTaskFactory
 
 
 class TestPeriodicTask(TestCase):

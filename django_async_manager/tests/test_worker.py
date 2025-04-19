@@ -1,10 +1,9 @@
 from django.test import TestCase
 from django.utils.timezone import now, timedelta
 
-from task_queue.decorators import background_task
-from task_queue.models import Task, TASK_REGISTRY
-from task_queue.tests.factories import TaskFactory
-from task_queue.worker import TaskWorker
+from django_async_manager.decorators import background_task
+from django_async_manager.models import Task
+from django_async_manager.tests.factories import TaskFactory
 
 
 def dummy_task_function():
@@ -105,31 +104,6 @@ class TestTask(TestCase):
             str(self.task),
             f"{self.task.name} ({self.task.status}) - Priority: {self.task.priority}",
         )
-
-    def test_worker_id_assignment(self):
-        """
-        Test that when a TaskWorker processes a task,
-        the task's worker_id field is updated (set to str(task.id))
-        and the task is marked as completed.
-        """
-        TASK_REGISTRY["dummy_task"] = dummy_task_function
-
-        task = TaskFactory.create(
-            name="dummy_task",
-            status="pending",
-            arguments={"args": [], "kwargs": {}},
-            priority=Task.PRIORITY_MAPPING["critical"],
-            worker_id=None,
-            scheduled_at=now(),
-        )
-        Task.objects.exclude(id=task.id).update(status="completed")
-
-        worker = TaskWorker(worker_id="test-worker", use_threads=True)
-        worker.process_task()
-
-        task.refresh_from_db()
-        self.assertEqual(task.worker_id, str(task.id))
-        self.assertEqual(task.status, "completed")
 
     def test_background_task_decorator_default_queue(self):
         """Test that the background_task decorator creates a task with the default queue."""

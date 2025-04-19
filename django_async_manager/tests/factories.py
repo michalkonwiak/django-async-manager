@@ -3,7 +3,7 @@ import uuid
 from django.utils.timezone import now, timedelta
 from faker import Faker
 
-from task_queue.models import Task, CrontabSchedule, PeriodicTask
+from django_async_manager.models import Task, CrontabSchedule, PeriodicTask
 
 faker = Faker()
 

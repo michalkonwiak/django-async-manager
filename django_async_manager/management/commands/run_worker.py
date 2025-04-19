@@ -1,8 +1,17 @@
 import logging
+import sys
 from django.core.management.base import BaseCommand
-from task_queue.worker import WorkerManager
+from django_async_manager.worker import WorkerManager
 
-logger = logging.getLogger("task_worker")
+logger = logging.getLogger("django_async_manager.worker")
+
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter("%(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
 
 
 class Command(BaseCommand):

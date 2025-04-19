@@ -85,6 +85,7 @@ class Task(models.Model):
     )
 
     class Meta:
+        app_label = "django_async_manager"
         ordering = ["-priority", "created_at"]
         indexes = [
             models.Index(fields=["status"]),
@@ -103,18 +104,84 @@ class Task(models.Model):
 
     def mark_as_failed(self, error_message):
         """Mark error and increment attempt counter (without autoretry)"""
-        self.attempts += 1
-        if len(self.last_errors) >= 5:
-            self.last_errors.pop(0)
-        self.last_errors.append(error_message)
-        self.status = "failed"
-        self.save()
+        from django.db import OperationalError
+        import time
+        import random
+        import logging
+
+        logger = logging.getLogger("django_async_manager.worker")
+        max_retries = 5
+        retry_count = 0
+        max_sleep_time = 10
+
+        while retry_count < max_retries:
+            try:
+                self.attempts += 1
+                if len(self.last_errors) >= 5:
+                    self.last_errors.pop(0)
+                self.last_errors.append(error_message)
+                self.status = "failed"
+                self.save()
+                break
+            except OperationalError as e:
+                if "database is locked" in str(e):
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        sleep_time = min(
+                            (2**retry_count) * 0.1 + (random.random() * 0.1),
+                            max_sleep_time,
+                        )
+                        logger.warning(
+                            f"Database locked during mark_as_failed, retrying in {sleep_time:.2f} seconds (attempt {retry_count}/{max_retries})"
+                        )
+                        time.sleep(sleep_time)
+                    else:
+                        logger.error(
+                            "Max retries exceeded for database lock during mark_as_failed, continuing without saving"
+                        )
+                        return
+                else:
+                    logger.exception("Error during mark_as_failed")
+                    raise
 
     def mark_as_completed(self):
-        """Mark task as completed and update timestamps"""
-        self.status = "completed"
-        self.completed_at = now()
-        self.save()
+        """Mark a task as completed and update timestamps"""
+        from django.db import OperationalError
+        import time
+        import random
+        import logging
+
+        logger = logging.getLogger("django_async_manager.worker")
+        max_retries = 5
+        retry_count = 0
+        max_sleep_time = 10
+
+        while retry_count < max_retries:
+            try:
+                self.status = "completed"
+                self.completed_at = now()
+                self.save()
+                break
+            except OperationalError as e:
+                if "database is locked" in str(e):
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        sleep_time = min(
+                            (2**retry_count) * 0.1 + (random.random() * 0.1),
+                            max_sleep_time,
+                        )
+                        logger.warning(
+                            f"Database locked during mark_as_completed, retrying in {sleep_time:.2f} seconds (attempt {retry_count}/{max_retries})"
+                        )
+                        time.sleep(sleep_time)
+                    else:
+                        logger.error(
+                            "Max retries exceeded for database lock during mark_as_completed, continuing without saving"
+                        )
+                        return
+                else:
+                    logger.exception("Error during mark_as_completed")
+                    raise
 
     def can_retry(self):
         """Check if task can be retried"""
@@ -122,19 +189,52 @@ class Task(models.Model):
 
     def schedule_retry(self, error_message: str) -> None:
         """Planning to retry a task using exponential backoff."""
-        self.attempts += 1
-        if len(self.last_errors) >= 5:
-            self.last_errors.pop(0)
-        self.last_errors.append(error_message)
-        if self.attempts < self.max_retries:
-            delay_seconds = int(
-                self.retry_delay * (self.retry_backoff ** (self.attempts - 1))
-            )
-            self.scheduled_at = now() + timedelta(seconds=delay_seconds)
-            self.status = "pending"
-        else:
-            self.status = "failed"
-        self.save()
+        from django.db import OperationalError
+        import time
+        import random
+        import logging
+
+        logger = logging.getLogger("django_async_manager.worker")
+        max_retries = 5
+        retry_count = 0
+        max_sleep_time = 10
+
+        while retry_count < max_retries:
+            try:
+                self.attempts += 1
+                if len(self.last_errors) >= 5:
+                    self.last_errors.pop(0)
+                self.last_errors.append(error_message)
+                if self.attempts < self.max_retries:
+                    delay_seconds = int(
+                        self.retry_delay * (self.retry_backoff ** (self.attempts - 1))
+                    )
+                    self.scheduled_at = now() + timedelta(seconds=delay_seconds)
+                    self.status = "pending"
+                else:
+                    self.status = "failed"
+                self.save()
+                break
+            except OperationalError as e:
+                if "database is locked" in str(e):
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        sleep_time = min(
+                            (2**retry_count) * 0.1 + (random.random() * 0.1),
+                            max_sleep_time,
+                        )
+                        logger.warning(
+                            f"Database locked during schedule_retry, retrying in {sleep_time:.2f} seconds (attempt {retry_count}/{max_retries})"
+                        )
+                        time.sleep(sleep_time)
+                    else:
+                        logger.error(
+                            "Max retries exceeded for database lock during schedule_retry, continuing without saving"
+                        )
+                        return
+                else:
+                    logger.exception("Error during schedule_retry")
+                    raise
 
 
 class CrontabSchedule(models.Model):
@@ -155,6 +255,9 @@ class CrontabSchedule(models.Model):
         default="*",
         help_text="Month of year field, e.g. '*' or '1,6,12'",
     )
+
+    class Meta:
+        app_label = "django_async_manager"
 
     def __str__(self):
         return f"{self.minute} {self.hour} {self.day_of_month} {self.month_of_year} {self.day_of_week}"
@@ -189,8 +292,14 @@ class PeriodicTask(models.Model):
     last_run_at = models.DateTimeField(null=True, blank=True)
     total_run_count = models.PositiveIntegerField(default=0)
 
+    class Meta:
+        app_label = "django_async_manager"
+
     def get_next_run_at(self):
-        base_time = self.last_run_at if self.last_run_at else now()
+        if self.last_run_at:
+            base_time = self.last_run_at
+        else:
+            base_time = now() - datetime.timedelta(microseconds=1)
         return self.crontab.get_next_run_time(base_time)
 
     def __str__(self):

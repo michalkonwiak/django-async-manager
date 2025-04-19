@@ -1,7 +1,7 @@
 from functools import wraps
 from typing import Optional, Callable, Union, List
 
-from task_queue.models import Task, TASK_REGISTRY
+from django_async_manager.models import Task, TASK_REGISTRY
 
 
 def background_task(
@@ -17,7 +17,9 @@ def background_task(
     """Decorator for registering background tasks."""
 
     def decorator(func: Callable) -> Callable:
-        TASK_REGISTRY[func.__name__] = func
+        module_name = func.__module__
+        func_name = func.__name__
+        TASK_REGISTRY[func.__name__] = f"{module_name}.{func_name}"
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Task:

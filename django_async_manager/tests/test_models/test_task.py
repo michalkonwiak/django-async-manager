@@ -1,8 +1,8 @@
 from django.test import TestCase
 from django.utils.timezone import now, timedelta
 
-from task_queue.models import Task
-from task_queue.tests.factories import TaskFactory
+from django_async_manager.models import Task
+from django_async_manager.tests.factories import TaskFactory
 
 
 class TestTask(TestCase):

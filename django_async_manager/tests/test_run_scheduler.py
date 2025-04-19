@@ -4,7 +4,7 @@ from django.test import TestCase
 
 
 class RunSchedulerCommandTests(TestCase):
-    @patch("task_queue.management.commands.run_scheduler.run_scheduler_loop")
+    @patch("django_async_manager.management.commands.run_scheduler.run_scheduler_loop")
     def test_run_scheduler_default(self, mock_run_scheduler_loop):
         """
         Test that calling the run_scheduler command without any options calls run_scheduler_loop.
@@ -13,7 +13,7 @@ class RunSchedulerCommandTests(TestCase):
         mock_run_scheduler_loop.assert_called_once()
 
     @patch(
-        "task_queue.management.commands.run_scheduler.run_scheduler_loop",
+        "django_async_manager.management.commands.run_scheduler.run_scheduler_loop",
         side_effect=KeyboardInterrupt,
     )
     def test_run_scheduler_with_default_interval(self, mock_run_scheduler_loop):

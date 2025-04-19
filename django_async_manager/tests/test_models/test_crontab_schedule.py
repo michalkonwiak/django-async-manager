@@ -2,7 +2,7 @@ import datetime
 from django.test import TestCase
 from django.utils.timezone import utc
 
-from task_queue.tests.factories import CrontabScheduleFactory
+from django_async_manager.tests.factories import CrontabScheduleFactory
 
 
 class TestCrontabSchedule(TestCase):
