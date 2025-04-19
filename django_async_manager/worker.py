@@ -4,7 +4,7 @@ import multiprocessing
 import threading
 import time
 import random
-from concurrent.futures import ProcessPoolExecutor, TimeoutError  # Import TimeoutError
+from concurrent.futures import ProcessPoolExecutor, TimeoutError
 
 from django.db import transaction, OperationalError
 from django.db.models import Q, Count, F
@@ -145,7 +145,11 @@ class TaskWorker:
             return
 
         try:
-            func_path = TASK_REGISTRY.get(task.name)
+            if "." in task.name:
+                func_path = task.name
+            else:
+                func_path = TASK_REGISTRY.get(task.name)
+
             if not func_path:
                 error_msg = f"Task function '{task.name}' has not been registered."
                 logger.error(error_msg)
