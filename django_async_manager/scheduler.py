@@ -69,9 +69,9 @@ class BeatScheduler:
             pt = sched["task"]
             next_run = sched["next_run"]
 
-            logger.debug(f"  Checking task {pt.id} ({pt.name})...")
-            logger.debug(f"    current_time: {current_time.isoformat()}")
-            logger.debug(f"    next_run:     {next_run.isoformat()}")
+            logger.debug(f"Checking task {pt.id} ({pt.name})...")
+            logger.debug(f"current_time: {current_time.isoformat()}")
+            logger.debug(f"next_run: {next_run.isoformat()}")
 
             grace_period = timedelta(seconds=1)
             if next_run <= (current_time + grace_period):
@@ -126,15 +126,11 @@ def run_scheduler_loop(default_interval=30):
     scheduler = BeatScheduler(default_interval=default_interval)
     while True:
         try:
-            scheduler.sync_schedule()
-
             next_due, due_tasks_info = scheduler.tick()
 
-            tasks_processed_this_tick = 0
             for task_info in due_tasks_info:
                 pt = task_info["task"]
                 run_time = task_info["run_time"]
-
                 try:
                     Task.objects.create(
                         name=pt.task_name,
@@ -142,41 +138,29 @@ def run_scheduler_loop(default_interval=30):
                         status="pending",
                     )
                     logger.info("Enqueued periodic task: %s (ID: %s)", pt.name, pt.id)
-                    tasks_processed_this_tick += 1
 
-                    try:
-                        PeriodicTask.objects.filter(pk=pt.pk).update(
-                            last_run_at=run_time,
-                            total_run_count=F("total_run_count") + 1,
-                        )
-                        logger.debug(
-                            f"Successfully updated last_run_at for PeriodicTask {pt.name} (ID: {pt.id})"
-                        )
-                    except Exception as update_err:
-                        logger.error(
-                            f"Failed to update PeriodicTask {pt.name} (ID: {pt.id}) after enqueue: {update_err}",
-                            exc_info=True,
-                        )
-
+                    PeriodicTask.objects.filter(pk=pt.pk).update(
+                        last_run_at=run_time,
+                        total_run_count=F("total_run_count") + 1,
+                    )
+                    logger.debug(
+                        f"Successfully updated last_run_at for PeriodicTask {pt.name} (ID: {pt.id})"
+                    )
                 except Exception as e:
                     logger.error(
-                        f"Failed to enqueue task for {pt.name} (ID: {pt.id}): {e}",
+                        f"Failed to enqueue or update task {pt.name} (ID: {pt.id}): {e}",
                         exc_info=True,
                     )
 
-            current_time_before_sleep = now()
-            sleep_duration = max(
-                0, (next_due - current_time_before_sleep).total_seconds()
+            current_time = now()
+            sleep_secs = max(
+                0.1,
+                min(default_interval, (next_due - current_time).total_seconds()),
             )
-
-            sleep_duration = max(sleep_duration, 0.1)
-
-            sleep_duration = min(sleep_duration, default_interval)
-
             logger.debug(
-                f"Scheduler sleeping for {sleep_duration:.2f} seconds (next check around {next_due})..."
+                f"Scheduler sleeping for {sleep_secs:.2f} seconds (next check around {next_due})..."
             )
-            time.sleep(sleep_duration)
+            time.sleep(sleep_secs)
 
         except KeyboardInterrupt:
             logger.info("Scheduler loop interrupted by user. Exiting.")
