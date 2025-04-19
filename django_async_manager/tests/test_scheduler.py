@@ -5,9 +5,9 @@ from django.test import TestCase
 from django.utils.timezone import now, utc
 from unittest.mock import patch
 
-from task_queue.models import Task
-from task_queue.scheduler import BeatScheduler, run_scheduler_loop
-from task_queue.tests.factories import PeriodicTaskFactory
+from django_async_manager.models import Task
+from django_async_manager.scheduler import BeatScheduler, run_scheduler_loop
+from django_async_manager.tests.factories import PeriodicTaskFactory
 
 
 class TestBeatScheduler(TestCase):
@@ -66,21 +66,24 @@ class TestBeatScheduler(TestCase):
         """
         Test the tick method:
           - If a task is due (next_run is less than current time),
-            tick should update last_run_at, increment total_run_count,
-            and compute a new next_run based on the new last_run_at.
+            tick should return it in due_tasks_info, update the internal schedule next_run,
+            but NOT modify the database.
         """
         fixed_now = datetime.datetime(2025, 4, 6, 16, 3, 0, tzinfo=utc)
-        with patch("task_queue.scheduler.now", return_value=fixed_now):
+        with patch("django_async_manager.scheduler.now", return_value=fixed_now):
             self.scheduler._schedule[self.periodic_task.id]["next_run"] = (
                 fixed_now - timedelta(minutes=1)
             )
             before_total = self.periodic_task.total_run_count
 
-            next_due, due_tasks = self.scheduler.tick()
+            next_due, due_tasks_info = self.scheduler.tick()
 
-            self.assertIn(self.periodic_task, due_tasks)
+            tasks = [info["task"] for info in due_tasks_info]
+            self.assertIn(self.periodic_task, tasks)
+
             self.periodic_task.refresh_from_db()
-            self.assertEqual(self.periodic_task.total_run_count, before_total + 1)
+            self.assertEqual(self.periodic_task.total_run_count, before_total)
+
             expected_next = self.periodic_task.crontab.get_next_run_time(fixed_now)
             self.assertEqual(
                 self.scheduler._schedule[self.periodic_task.id]["next_run"],

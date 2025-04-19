@@ -1,7 +1,7 @@
 from io import StringIO
 from django.test import TestCase, override_settings
 from django.core.management import call_command
-from task_queue.models import PeriodicTask
+from django_async_manager.models import PeriodicTask
 
 
 class UpdateBeatScheduleCommandTests(TestCase):

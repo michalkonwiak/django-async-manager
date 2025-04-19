@@ -1,6 +1,6 @@
 from django.test import TestCase
-from task_queue.decorators import background_task
-from task_queue.models import Task
+from django_async_manager.decorators import background_task
+from django_async_manager.models import Task
 
 
 class BackgroundTaskDecoratorTests(TestCase):
