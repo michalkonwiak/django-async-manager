@@ -19,12 +19,28 @@ def background_task(
     def decorator(func: Callable) -> Callable:
         module_name = func.__module__
         func_name = func.__name__
-        TASK_REGISTRY[func.__name__] = f"{module_name}.{func_name}"
+        TASK_REGISTRY[func_name] = f"{module_name}.{func_name}"
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Task:
+            dep_list = []
+            if dependencies:
+                raw_deps = (
+                    dependencies
+                    if isinstance(dependencies, (list, tuple))
+                    else [dependencies]
+                )
+                for dep in raw_deps:
+                    if isinstance(dep, Task):
+                        dep_list.append(dep)
+                    elif callable(dep):
+                        dep_task = dep.run_async()
+                        dep_list.append(dep_task)
+                    else:
+                        raise ValueError(f"Unsupported dependency type: {type(dep)}")
+
             task = Task.objects.create(
-                name=func.__name__,
+                name=func_name,
                 arguments={"args": args, "kwargs": kwargs},
                 status="pending",
                 priority=Task.PRIORITY_MAPPING.get(
@@ -37,13 +53,10 @@ def background_task(
                 max_retries=max_retries,
                 timeout=timeout,
             )
-            if dependencies:
-                deps = (
-                    dependencies
-                    if isinstance(dependencies, (list, tuple))
-                    else [dependencies]
-                )
-                task.dependencies.set(deps)
+
+            if dep_list:
+                task.dependencies.set(dep_list)
+
             return task
 
         wrapper.run_async = wrapper
