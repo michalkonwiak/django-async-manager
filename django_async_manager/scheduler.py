@@ -1,3 +1,4 @@
+import importlib
 import time
 import logging
 from datetime import timedelta
@@ -132,11 +133,17 @@ def run_scheduler_loop(default_interval=30):
                 pt = task_info["task"]
                 run_time = task_info["run_time"]
                 try:
-                    Task.objects.create(
-                        name=pt.task_name,
-                        arguments={"args": pt.arguments, "kwargs": pt.kwargs},
-                        status="pending",
-                    )
+                    module_path, func_name = pt.task_name.rsplit(".", 1)
+                    module = importlib.import_module(module_path)
+                    func = getattr(module, func_name)
+                    if hasattr(func, "run_async"):
+                        func.run_async(*pt.arguments, **pt.kwargs)
+                    else:
+                        Task.objects.create(
+                            name=pt.task_name,
+                            arguments={"args": pt.arguments, "kwargs": pt.kwargs},
+                            status="pending",
+                        )
                     logger.info("Enqueued periodic task: %s (ID: %s)", pt.name, pt.id)
 
                     PeriodicTask.objects.filter(pk=pt.pk).update(
