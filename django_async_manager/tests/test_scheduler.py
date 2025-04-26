@@ -1,6 +1,6 @@
 import datetime
 from datetime import timedelta
-
+import types
 from django.test import TestCase
 from django.utils.timezone import now, utc
 from unittest.mock import patch
@@ -97,7 +97,7 @@ class TestRunSchedulerLoop(TestCase):
         past_time = now() - timedelta(minutes=10)
         self.periodic_task = PeriodicTaskFactory(
             name="Loop Task",
-            task_name="dummy_task",
+            task_name="dummy_task.dummy_task",
             arguments=[],
             kwargs={},
             enabled=True,
@@ -122,9 +122,22 @@ class TestRunSchedulerLoop(TestCase):
             if call_count >= 1:
                 raise KeyboardInterrupt("Break loop after one iteration")
 
+        dummy_module = types.SimpleNamespace()
+
+        def stub_run_async(*args, **kwargs):
+            return Task.objects.create(
+                name=self.periodic_task.task_name,
+                arguments={"args": [], "kwargs": {}},
+                status="pending",
+            )
+
+        stub_run_async.run_async = stub_run_async
+        dummy_module.dummy_task = stub_run_async
+
         with patch("time.sleep", side_effect=fake_sleep):
-            with self.assertRaises(KeyboardInterrupt):
-                run_scheduler_loop()
+            with patch("importlib.import_module", return_value=dummy_module):
+                with self.assertRaises(KeyboardInterrupt):
+                    run_scheduler_loop()
 
         tasks_created = Task.objects.filter(name=self.periodic_task.task_name)
         self.assertGreaterEqual(tasks_created.count(), 1)
