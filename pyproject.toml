@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "build", "twine"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-async-manager"
-version = "0.1.0"
+version = "0.1.1"
 description = "Django library for managing asynchronous tasks with scheduling and dependency management"
 readme = "README.md"
 authors = [
@@ -28,7 +28,6 @@ requires-python = ">=3.12"
 dependencies = [
     "croniter>=6.0.0",
     "django>=3.2",
-    "setuptools>=78.1.0",
 ]
 
 [project.optional-dependencies]

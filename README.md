@@ -1,3 +1,14 @@
+[![PyPI Version](https://img.shields.io/pypi/v/django-async-manager.svg)](https://pypi.org/project/django-async-manager/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/pypi/pyversions/django-async-manager)](https://pypi.org/project/django-async-manager/)
+[![Django Version](https://img.shields.io/badge/django-3.2%2B-green.svg)](https://www.djangoproject.com/)
+[![CI](https://github.com/michalkonwiak/django-async-manager/actions/workflows/ci.yaml/badge.svg)](https://github.com/michalkonwiak/django-async-manager/actions/workflows/ci.yaml)
+[![Development Status](https://img.shields.io/badge/status-beta-orange.svg)](https://pypi.org/project/django-async-manager/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/django-async-manager.svg)](https://pypi.org/project/django-async-manager/)
+[![Last Commit](https://img.shields.io/github/last-commit/michalkonwiak/django-async-manager)](https://github.com/michalkonwiak/django-async-manager/commits/master)
+[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![GitHub Stars](https://img.shields.io/github/stars/michalkonwiak/django-async-manager?style=social)](https://github.com/michalkonwiak/django-async-manager)
+
 # Django Async Manager
 
 Django library for managing asynchronous tasks with scheduling and dependency management.
