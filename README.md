@@ -26,22 +26,10 @@ Django library for managing asynchronous tasks with scheduling and dependency ma
 
 ## Installation
 
-### From PyPI (recommended)
+### From PyPI
 
 ```bash
 pip install django-async-manager
-```
-
-### From Local Directory
-
-To install the package from a local directory (for development or testing):
-
-```bash
-# Navigate to the directory containing the package
-cd /path/to/django-async-manager
-
-# Install in development mode
-pip install -e .
 ```
 
 ## Quick Start
