@@ -1,13 +1,100 @@
 from django.test import TestCase
 from django.utils.timezone import now, timedelta
+from unittest.mock import patch, MagicMock
 
 from django_async_manager.decorators import background_task
 from django_async_manager.models import Task
 from django_async_manager.tests.factories import TaskFactory
+from django_async_manager.worker import execute_task, TimeoutException
 
 
 def dummy_task_function():
     return "ok"
+
+
+def sample_function_for_execution(a, b):
+    return a + b
+
+
+class TestExecuteTask(TestCase):
+    """Tests for the execute_task function."""
+
+    @patch("django_async_manager.worker.ThreadPoolExecutor")
+    @patch("django_async_manager.worker.ProcessPoolExecutor")
+    def test_execute_task_with_threads(
+        self, mock_process_executor, mock_thread_executor
+    ):
+        """Test that execute_task uses ThreadPoolExecutor when use_threads=True."""
+        mock_future = MagicMock()
+        mock_future.result.return_value = 5
+        mock_thread_executor.return_value.__enter__.return_value.submit.return_value = (
+            mock_future
+        )
+
+        result = execute_task(
+            "django_async_manager.tests.test_worker.sample_function_for_execution",
+            [2, 3],
+            {},
+            timeout=10,
+            use_threads=True,
+        )
+
+        self.assertEqual(result, 5)
+        mock_thread_executor.assert_called_once()
+        mock_process_executor.assert_not_called()
+
+    @patch("django_async_manager.worker.ThreadPoolExecutor")
+    @patch("django_async_manager.worker.ProcessPoolExecutor")
+    def test_execute_task_with_processes(
+        self, mock_process_executor, mock_thread_executor
+    ):
+        """Test that execute_task uses ProcessPoolExecutor when use_threads=False."""
+        mock_future = MagicMock()
+        mock_future.result.return_value = 5
+        mock_process_executor.return_value.__enter__.return_value.submit.return_value = mock_future
+
+        result = execute_task(
+            "django_async_manager.tests.test_worker.sample_function_for_execution",
+            [2, 3],
+            {},
+            timeout=10,
+            use_threads=False,
+        )
+
+        self.assertEqual(result, 5)
+        mock_process_executor.assert_called_once()
+        mock_thread_executor.assert_not_called()
+
+    @patch("importlib.import_module")
+    def test_function_existence_validation(self, mock_import_module):
+        """Test that execute_task validates function existence before execution."""
+        mock_module = MagicMock()
+        mock_module.non_existent_function = None
+        mock_import_module.return_value = mock_module
+
+        with self.assertRaises(ValueError):
+            execute_task("some_module.non_existent_function", [], {}, timeout=10)
+
+    @patch("django_async_manager.worker.ProcessPoolExecutor")
+    def test_timeout_handling(self, mock_executor):
+        """Test that execute_task handles timeouts correctly."""
+        from concurrent.futures import TimeoutError
+
+        mock_future = MagicMock()
+        mock_future.result.side_effect = TimeoutError()
+        mock_executor.return_value.__enter__.return_value.submit.return_value = (
+            mock_future
+        )
+
+        with self.assertRaises(TimeoutException) as context:
+            execute_task(
+                "django_async_manager.tests.test_worker.sample_function_for_execution",
+                [2, 3],
+                {},
+                timeout=1,
+            )
+
+        self.assertIn("ran for", str(context.exception))
 
 
 class TestTask(TestCase):

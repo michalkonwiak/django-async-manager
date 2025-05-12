@@ -14,6 +14,7 @@ class BeatScheduler:
         self._schedule = {}
         self.default_interval = default_interval
         self.update_schedule()
+        self.check_missed_tasks()
 
     def update_schedule(self):
         """Refresh the schedule from the database with active periodic tasks."""
@@ -41,6 +42,91 @@ class BeatScheduler:
         self._schedule = active_tasks
         logger.debug("Schedule update complete.")
 
+    def check_missed_tasks(self):
+        """
+        Check for tasks that were scheduled to run in the past but were missed.
+        This can happen if the scheduler was down when the task was due.
+        """
+        logger.info("Checking for missed tasks...")
+        current_time = now()
+
+        try:
+            periodic_tasks = PeriodicTask.objects.filter(enabled=True)
+            missed_count = 0
+
+            for pt in periodic_tasks:
+                if pt.last_run_at:
+                    next_run_after_last = pt.crontab.get_next_run_time(pt.last_run_at)
+
+                    if next_run_after_last < current_time - timedelta(seconds=60):
+                        logger.info(
+                            f"Found missed task: {pt.name} (ID: {pt.id}). "
+                            f"Should have run at {next_run_after_last}, current time is {current_time}."
+                        )
+                        missed_count += 1
+
+                        try:
+                            if "." in pt.task_name:
+                                module_path, func_name = pt.task_name.rsplit(".", 1)
+                                module = importlib.import_module(module_path)
+                                func = getattr(module, func_name)
+                            else:
+                                from django_async_manager.models import TASK_REGISTRY
+
+                                if pt.task_name in TASK_REGISTRY:
+                                    full_path = TASK_REGISTRY[pt.task_name]
+                                    module_path, func_name = full_path.rsplit(".", 1)
+                                    module = importlib.import_module(module_path)
+                                    func = getattr(module, func_name)
+                                else:
+                                    logger.error(
+                                        f"Task {pt.task_name} not found in registry"
+                                    )
+                                    continue
+                            if hasattr(func, "run_async") and callable(func.run_async):
+                                func.run_async(*pt.arguments, **pt.kwargs)
+                            else:
+                                func(*pt.arguments, **pt.kwargs)
+                                Task.objects.create(
+                                    name=pt.task_name,
+                                    arguments={
+                                        "args": pt.arguments,
+                                        "kwargs": pt.kwargs,
+                                    },
+                                    status="pending",
+                                )
+                            logger.info(
+                                f"Enqueued missed task: {pt.name} (ID: {pt.id})"
+                            )
+
+                            from django_async_manager.utils import (
+                                with_database_lock_handling,
+                            )
+
+                            @with_database_lock_handling(
+                                logger_name="django_async_manager.scheduler"
+                            )
+                            def _update_last_run():
+                                PeriodicTask.objects.filter(pk=pt.pk).update(
+                                    last_run_at=current_time,
+                                    total_run_count=F("total_run_count") + 1,
+                                )
+
+                            _update_last_run()
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to enqueue missed task {pt.name} (ID: {pt.id}): {e}",
+                                exc_info=True,
+                            )
+
+            if missed_count > 0:
+                logger.info(f"Found and processed {missed_count} missed tasks.")
+            else:
+                logger.info("No missed tasks found.")
+
+        except Exception as e:
+            logger.error(f"Error checking for missed tasks: {e}", exc_info=True)
+
     def sync_schedule(self):
         """Synchronize the schedule – update schedule entries."""
         self.update_schedule()
@@ -65,7 +151,22 @@ class BeatScheduler:
                 logger.warning(
                     f"Task ID {pk} vanished from schedule during tick. Skipping."
                 )
-                continue
+                try:
+                    pt = PeriodicTask.objects.filter(pk=pk).first()
+                    if pt and pt.enabled:
+                        logger.info(
+                            f"Recovered task {pk} ({pt.name}) after it vanished from schedule."
+                        )
+                        next_run = pt.get_next_run_at()
+                        self._schedule[pk] = {"task": pt, "next_run": next_run}
+                    else:
+                        logger.info(
+                            f"Task {pk} not found in database or is disabled. Permanently removing from schedule."
+                        )
+                        continue
+                except Exception as e:
+                    logger.error(f"Error recovering task {pk}: {e}")
+                    continue
 
             pt = sched["task"]
             next_run = sched["next_run"]
@@ -146,10 +247,18 @@ def run_scheduler_loop(default_interval=30):
                         )
                     logger.info("Enqueued periodic task: %s (ID: %s)", pt.name, pt.id)
 
-                    PeriodicTask.objects.filter(pk=pt.pk).update(
-                        last_run_at=run_time,
-                        total_run_count=F("total_run_count") + 1,
+                    from django_async_manager.utils import with_database_lock_handling
+
+                    @with_database_lock_handling(
+                        logger_name="django_async_manager.scheduler"
                     )
+                    def _update_periodic_task():
+                        PeriodicTask.objects.filter(pk=pt.pk).update(
+                            last_run_at=run_time,
+                            total_run_count=F("total_run_count") + 1,
+                        )
+
+                    _update_periodic_task()
                     logger.debug(
                         f"Successfully updated last_run_at for PeriodicTask {pt.name} (ID: {pt.id})"
                     )

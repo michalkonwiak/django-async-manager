@@ -4,6 +4,21 @@ from django_async_manager.models import Task
 
 
 class BackgroundTaskDecoratorTests(TestCase):
+    def test_priority_validation(self):
+        """Test that the decorator validates the priority parameter."""
+        with self.assertRaises(ValueError) as context:
+
+            @background_task(priority="invalid_priority")
+            def task_with_invalid_priority():
+                pass
+
+        error_message = str(context.exception)
+        self.assertIn("invalid_priority", error_message)
+        self.assertIn("low", error_message)
+        self.assertIn("medium", error_message)
+        self.assertIn("high", error_message)
+        self.assertIn("critical", error_message)
+
     def test_task_registration(self):
         """Test if a function decorated with @background_task registers a Task."""
 

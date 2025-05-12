@@ -3,7 +3,7 @@ from datetime import timedelta
 import types
 from django.test import TestCase
 from django.utils.timezone import now, utc
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from django_async_manager.models import Task
 from django_async_manager.scheduler import BeatScheduler, run_scheduler_loop
@@ -29,7 +29,9 @@ class TestBeatScheduler(TestCase):
         self.periodic_task.crontab.save()
         self.periodic_task.last_run_at = base_time
         self.periodic_task.save()
-        self.scheduler = BeatScheduler()
+
+        with patch.object(BeatScheduler, "check_missed_tasks"):
+            self.scheduler = BeatScheduler()
 
     def tearDown(self):
         self.scheduler = None
@@ -61,6 +63,42 @@ class TestBeatScheduler(TestCase):
         self.scheduler._schedule.clear()
         self.scheduler.sync_schedule()
         self.assertIn(self.periodic_task.id, self.scheduler._schedule)
+
+    def test_check_missed_tasks(self):
+        """
+        Test that check_missed_tasks identifies and processes tasks that were missed.
+        """
+        past_time = now() - timedelta(hours=3)
+        missed_task = PeriodicTaskFactory(
+            name="Missed Task",
+            task_name="dummy_module.dummy_function",
+            enabled=True,
+            last_run_at=past_time,
+        )
+
+        next_run = past_time + timedelta(minutes=30)
+
+        with patch.object(
+            missed_task.crontab, "get_next_run_time", return_value=next_run
+        ):
+            with patch("importlib.import_module") as mock_import:
+                mock_module = MagicMock()
+                mock_function = MagicMock()
+                mock_function.run_async = None
+                mock_module.dummy_function = mock_function
+                mock_import.return_value = mock_module
+
+                with patch(
+                    "django_async_manager.utils.with_database_lock_handling",
+                    lambda *args, **kwargs: lambda func: func,
+                ):
+                    self.scheduler.check_missed_tasks()
+
+                    mock_import.assert_called_with("dummy_module")
+                    mock_function.assert_called_once()
+
+                    missed_task.refresh_from_db()
+                    self.assertGreater(missed_task.last_run_at, past_time)
 
     def test_tick(self):
         """

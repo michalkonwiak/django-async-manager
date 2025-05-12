@@ -3,10 +3,9 @@ import importlib
 import multiprocessing
 import threading
 import time
-import random
-from concurrent.futures import ProcessPoolExecutor, TimeoutError
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, TimeoutError
 
-from django.db import transaction, OperationalError
+from django.db import transaction
 from django.db.models import Q, Count, F
 from django.utils.timezone import now
 from django_async_manager.models import Task, TASK_REGISTRY
@@ -38,25 +37,67 @@ def _execute_task_in_process(func_path, args, kwargs):
                 f"Running function {func_path} which might not be decorated as expected."
             )
 
+        if func_to_run is None or not callable(func_to_run):
+            error_msg = f"Function {func_path} is not callable"
+            logger.error(error_msg)
+            raise TypeError(error_msg)
+
         return func_to_run(*args, **kwargs)
     except Exception as e:
         logger.debug(f"Exception in child process for {func_path}: {e}", exc_info=True)
         raise e
 
 
-def execute_task(func_path: str, args, kwargs, timeout: int):
+def execute_task(func_path: str, args, kwargs, timeout: int, use_threads=False):
     """
-    Submits the task execution (defined by func_path) to a ProcessPoolExecutor.
+    Submits the task execution (defined by func_path) to either a ThreadPoolExecutor or ProcessPoolExecutor.
     Handles timeouts and exceptions from the child process.
+
+    Args:
+        func_path: The import path to the function to execute
+        args: Positional arguments to pass to the function
+        kwargs: Keyword arguments to pass to the function
+        timeout: Maximum execution time in seconds
+        use_threads: If True, use ThreadPoolExecutor, otherwise use ProcessPoolExecutor
     """
-    with ProcessPoolExecutor(max_workers=1) as executor:
+    try:
+        module_name, func_name = func_path.rsplit(".", 1)
+        module = importlib.import_module(module_name)
+        if not hasattr(module, func_name):
+            raise AttributeError(
+                f"Function {func_name} not found in module {module_name}"
+            )
+
+        func = getattr(module, func_name)
+        if func is None or not callable(func):
+            raise TypeError(
+                f"Function {func_name} in module {module_name} is not callable"
+            )
+    except (ValueError, ImportError, AttributeError, TypeError) as e:
+        logger.error(
+            f"Invalid function path or function not found: {func_path}. Error: {e}"
+        )
+        raise ValueError(
+            f"Invalid function path or function not found: {func_path}. Error: {e}"
+        )
+
+    executor_class = ThreadPoolExecutor if use_threads else ProcessPoolExecutor
+
+    with executor_class(max_workers=1) as executor:
         future = executor.submit(_execute_task_in_process, func_path, args, kwargs)
         try:
-            return future.result(timeout=timeout)
+            start_time = time.time()
+            result = future.result(timeout=timeout)
+            execution_time = time.time() - start_time
+            logger.debug(f"Task {func_path} completed in {execution_time:.2f} seconds")
+            return result
         except TimeoutError:
-            logger.warning(f"Task {func_path} exceeded timeout of {timeout} seconds")
+            execution_time = time.time() - start_time
+            logger.warning(
+                f"Task {func_path} exceeded timeout of {timeout} seconds (ran for {execution_time:.2f} seconds)"
+            )
             raise TimeoutException(
-                f"Task {func_path} exceeded timeout of {timeout} seconds"
+                f"Task {func_path} exceeded timeout of {timeout} seconds (ran for {execution_time:.2f} seconds)"
             )
         except Exception as e:
             logger.error(f"Task {func_path} failed with exception: {e}")
@@ -72,67 +113,50 @@ class TaskWorker:
         self.use_threads = use_threads
 
     def process_task(self) -> None:
+        from django_async_manager.utils import with_database_lock_handling
+
         task = None
-        max_retries = 3
-        retry_count = 0
 
-        while retry_count < max_retries:
-            try:
-                with transaction.atomic():
-                    task_qs = (
-                        Task.objects.filter(status="pending", queue=self.queue)
-                        .annotate(
-                            total_dependencies=Count("dependencies"),
-                            completed_dependencies=Count(
-                                "dependencies",
-                                filter=Q(dependencies__status="completed"),
-                            ),
-                        )
-                        .filter(
-                            Q(total_dependencies=0)
-                            | Q(total_dependencies=F("completed_dependencies"))
-                        )
-                        .filter(
-                            Q(scheduled_at__isnull=True) | Q(scheduled_at__lte=now())
-                        )
-                        .order_by("-priority", "created_at")
+        @with_database_lock_handling(
+            max_retries=3, logger_name="django_async_manager.worker"
+        )
+        def _acquire_task():
+            nonlocal task
+            with transaction.atomic():
+                task_qs = (
+                    Task.objects.filter(status="pending", queue=self.queue)
+                    .annotate(
+                        total_dependencies=Count("dependencies"),
+                        completed_dependencies=Count(
+                            "dependencies",
+                            filter=Q(dependencies__status="completed"),
+                        ),
                     )
-
-                    task = task_qs.select_for_update(skip_locked=True).first()
-                    if not task:
-                        return
-
-                    if not task.worker_id:
-                        task.worker_id = self.worker_id
-
-                    task.status = "in_progress"
-                    task.started_at = now()
-                    task.attempts = F("attempts") + 1
-                    task.save(
-                        update_fields=["status", "started_at", "worker_id", "attempts"]
+                    .filter(
+                        Q(total_dependencies=0)
+                        | Q(total_dependencies=F("completed_dependencies"))
                     )
+                    .filter(Q(scheduled_at__isnull=True) | Q(scheduled_at__lte=now()))
+                    .order_by("-priority", "created_at")
+                )
 
-                break
-            except OperationalError as e:
-                if "database is locked" in str(e):
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        sleep_time = (2**retry_count) * 0.1 + (random.random() * 0.1)
-                        logger.warning(
-                            f"Database locked, retrying in {sleep_time:.2f} seconds (attempt {retry_count}/{max_retries})"
-                        )
-                        time.sleep(sleep_time)
-                    else:
-                        logger.exception(
-                            "Max retries exceeded for database lock while trying to fetch task."
-                        )
-                        return
-                else:
-                    logger.exception("OperationalError during task fetch/lock")
-                    return
-            except Exception:
-                logger.exception("Unexpected error during task fetch/lock")
-                return
+                task = task_qs.select_for_update(skip_locked=True).first()
+                if not task:
+                    return False
+
+                if not task.worker_id:
+                    task.worker_id = self.worker_id
+
+                task.status = "in_progress"
+                task.started_at = now()
+                task.attempts = F("attempts") + 1
+                task.save(
+                    update_fields=["status", "started_at", "worker_id", "attempts"]
+                )
+                return True
+
+        if not _acquire_task():
+            return
 
         if not task:
             logger.debug("No task acquired after lock attempts.")
@@ -165,7 +189,9 @@ class TaskWorker:
             args = task.arguments.get("args", [])
             kwargs = task.arguments.get("kwargs", {})
 
-            execute_task(func_path, args, kwargs, task.timeout)
+            execute_task(
+                func_path, args, kwargs, task.timeout, use_threads=self.use_threads
+            )
 
             task.mark_as_completed()
             logger.info(f"Task {task.id} ({task.name}) completed successfully.")

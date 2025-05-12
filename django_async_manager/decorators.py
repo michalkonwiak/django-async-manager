@@ -14,6 +14,25 @@ def background_task(
     max_retries: int = 1,
     timeout: int = 300,
 ) -> Callable:
+    """
+    Decorator for marking a function as a background task.
+
+    Args:
+        priority: Task priority level ("low", "medium", "high", "critical")
+        queue: Queue name for task processing
+        dependencies: Tasks that must complete before this task runs
+        autoretry: Whether to automatically retry failed tasks
+        retry_delay: Initial delay between retries in seconds
+        retry_backoff: Multiplier for increasing delay between retries
+        max_retries: Maximum number of retry attempts
+        timeout: Maximum execution time in seconds
+    """
+    valid_priorities = list(Task.PRIORITY_MAPPING.keys())
+    if priority not in valid_priorities:
+        raise ValueError(
+            f"Invalid priority: '{priority}'. Must be one of: {', '.join(valid_priorities)}"
+        )
+
     def decorator(func: Callable) -> Callable:
         TASK_REGISTRY[func.__name__] = f"{func.__module__}.{func.__name__}"
 
