@@ -22,6 +22,7 @@ Django library for managing asynchronous tasks with scheduling and dependency ma
 - **Automatic Retries**: Configure automatic retries with exponential backoff for failed tasks
 - **Multiple Workers**: Run multiple workers using threads or processes
 - **Task Timeouts**: Set timeouts for long-running tasks
+- **Memory Management**: Set memory limits for tasks to prevent resource exhaustion
 - **Monitoring**: Track task status, execution time, and errors
 
 ## Installation
@@ -151,6 +152,39 @@ def process_large_file(file_path):
     pass
 ```
 
+### Memory Limit Configuration
+
+You can set memory limits for tasks to prevent them from consuming too much memory:
+
+```python
+@background_task(memory_limit=256)  # 256 MB memory limit
+def memory_intensive_task(data):
+    # Process data
+    pass
+```
+
+**Important**: Memory limits are only supported when using processes, not threads. If you specify a memory limit for a task that runs in a thread-based worker, the limit will be ignored and a warning will be logged.
+
+To use memory limits effectively, make sure to run your workers in process mode:
+
+```bash
+# Run workers in process mode to enable memory limits
+python manage.py run_worker --num-workers=2 --processes
+```
+
+If a task exceeds its memory limit, it will be terminated and can be configured to retry automatically:
+
+```python
+@background_task(
+    memory_limit=512,         # 512 MB memory limit
+    max_retries=3,            # Retry up to 3 times
+    retry_delay=60            # Wait 60 seconds before first retry
+)
+def process_large_dataset(dataset_id):
+    # Process large dataset
+    pass
+```
+
 ### Task Priority
 
 You can assign different priority levels to tasks:
@@ -195,6 +229,7 @@ The `@background_task` decorator accepts the following parameters:
     retry_backoff=2.0,       # Multiplier for increasing delay between retries
     max_retries=1,           # Maximum number of retry attempts
     timeout=300,             # Maximum execution time in seconds
+    memory_limit=None,       # Maximum memory usage in MB (None for no limit)
 )
 def my_task():
     # Task implementation

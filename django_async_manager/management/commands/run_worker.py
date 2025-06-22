@@ -38,15 +38,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         num_workers = options["num_workers"]
-        use_threads = not options["processes"]
+        use_processes = options["processes"]
         queue = options["queue"]
 
         logger.info(
-            f"Starting {num_workers} {'thread' if use_threads else 'process'} workers on queue '{queue}'..."
+            f"Starting {num_workers} {'thread' if not use_processes else 'process'} workers on queue '{queue}'..."
         )
 
         manager = WorkerManager(
-            num_workers=num_workers, queue=queue, use_threads=use_threads
+            num_workers=num_workers, queue=queue, use_processes=use_processes
         )
         manager.start_workers()
         manager.join_workers()

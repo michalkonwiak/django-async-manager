@@ -13,7 +13,7 @@ class RunWorkerCommandTests(TestCase):
         call_command("run_worker")
 
         mock_worker_manager.assert_called_once_with(
-            num_workers=1, queue="default", use_threads=True
+            num_workers=1, queue="default", use_processes=False
         )
         mock_instance.start_workers.assert_called_once()
         mock_instance.join_workers.assert_called_once()
@@ -27,7 +27,7 @@ class RunWorkerCommandTests(TestCase):
         call_command("run_worker", "--num-workers", "3")
 
         mock_worker_manager.assert_called_once_with(
-            num_workers=3, queue="default", use_threads=True
+            num_workers=3, queue="default", use_processes=False
         )
         mock_instance.start_workers.assert_called_once()
         mock_instance.join_workers.assert_called_once()
@@ -41,7 +41,7 @@ class RunWorkerCommandTests(TestCase):
         call_command("run_worker", "--num-workers", "2", "--processes")
 
         mock_worker_manager.assert_called_once_with(
-            num_workers=2, queue="default", use_threads=False
+            num_workers=2, queue="default", use_processes=True
         )
         mock_instance.start_workers.assert_called_once()
         mock_instance.join_workers.assert_called_once()
@@ -55,7 +55,7 @@ class RunWorkerCommandTests(TestCase):
         call_command("run_worker", "--queue", "critical")
 
         mock_worker_manager.assert_called_once_with(
-            num_workers=1, queue="critical", use_threads=True
+            num_workers=1, queue="critical", use_processes=False
         )
         mock_instance.start_workers.assert_called_once()
         mock_instance.join_workers.assert_called_once()

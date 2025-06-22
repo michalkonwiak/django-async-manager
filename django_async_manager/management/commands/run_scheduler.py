@@ -35,7 +35,7 @@ class Command(BaseCommand):
         worker_manager = WorkerManager(
             num_workers=1,
             queue="default",
-            use_threads=True,
+            use_processes=False,
         )
         worker_manager.start_workers()
 

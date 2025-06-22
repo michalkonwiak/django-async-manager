@@ -41,6 +41,9 @@ class Task(models.Model):
     timeout = models.IntegerField(
         default=300, help_text="Max execution time in seconds"
     )
+    memory_limit = models.IntegerField(
+        null=True, blank=True, help_text="Max memory usage in MB (None for no limit)"
+    )
     attempts = models.IntegerField(default=0)
     max_retries = models.IntegerField(
         default=1, help_text="Max number of retries before marking as failed"

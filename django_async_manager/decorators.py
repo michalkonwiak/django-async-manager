@@ -13,6 +13,7 @@ def background_task(
     retry_backoff: float = 2.0,
     max_retries: int = 1,
     timeout: int = 300,
+    memory_limit: Optional[int] = None,
 ) -> Callable:
     """
     Decorator for marking a function as a background task.
@@ -26,6 +27,7 @@ def background_task(
         retry_backoff: Multiplier for increasing delay between retries
         max_retries: Maximum number of retry attempts
         timeout: Maximum execution time in seconds
+        memory_limit: Maximum memory usage in MB (None for no limit)
     """
     valid_priorities = list(Task.PRIORITY_MAPPING.keys())
     if priority not in valid_priorities:
@@ -81,6 +83,7 @@ def background_task(
                 retry_backoff=retry_backoff,
                 max_retries=max_retries,
                 timeout=timeout,
+                memory_limit=memory_limit,
             )
             if dep_list:
                 task.dependencies.set(dep_list)
